@@ -1,28 +1,30 @@
 from functools import wraps
 from flask import request, g, jsonify
-from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
-from itsdangerous import SignatureExpired, BadSignature
+import jwt
+from datetime import datetime, timedelta
 from index import app
 
 TWO_WEEKS = 1209600
 
 
 def generate_token(user, expiration=TWO_WEEKS):
-    s = Serializer(app.config['SECRET_KEY'], expires_in=expiration)
-    token = s.dumps({
+    payload = {
         'id': user.id,
         'email': user.email,
-    }).decode('utf-8')
+        'exp': datetime.utcnow() + timedelta(seconds=expiration)
+    }
+    token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
     return token
 
 
 def verify_token(token):
-    s = Serializer(app.config['SECRET_KEY'])
     try:
-        data = s.loads(token)
-    except (BadSignature, SignatureExpired):
+        if isinstance(token, bytes):
+            token = token.decode('utf-8')
+        data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        return data
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
-    return data
 
 
 def requires_auth(f):
